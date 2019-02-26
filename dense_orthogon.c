@@ -17,11 +17,12 @@ void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, int nprocs, int myid, 
     for(i=0;i<(1+log2(nprocs));i++){
         w[i] = (DenseMatrix*)malloc(sizeof(DenseMatrix));
     }
-    Q_loc1 = gen_mat(qI, qJ, 0);
-    Q_loc2 = gen_mat(2*qJ, qJ, 0);
+    //Q_loc1 = gen_mat(qI, qJ, 0);
+    //Q_loc2 = gen_mat(2*qJ, qJ, 0);
     R_upper = gen_mat(qJ, qJ, 0);
     R_hat = gen_mat(2*qJ, qJ, 0);
     
+    printf("TEST1\n");
     for(i=1; i<=nprocs; i*=2){
         if(myid%i == 0){
             if(i==1)
@@ -35,7 +36,7 @@ void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, int nprocs, int myid, 
         }
         count++;
     }
-    printf("TEST\n");
+    printf("TEST2\n");
     
     count=0; 
     for(i=1; i<=nprocs; i*=2){
