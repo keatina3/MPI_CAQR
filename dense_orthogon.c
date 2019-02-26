@@ -1,22 +1,46 @@
+//#include <stdio.h>
+
 #include <stdlib.h>
 #include <math.h>
 #include <mpi.h>
 #include "utils.h"
 #include "dense_orthogon.h"
 
-void TSQR(Dense Matrix *W, DenseMatrix* Q, DenseMatrix *R, int p, int myid, MPI_Comm comm){
-    int qI = W->I;
-    int i;
-    DenseMatrix Qloc;
+void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, int nprocs, int myid, MPI_Comm comm){
+    int qI = W->I, qJ = W->J;
+    int i,j;
+    MPI_Status stat;
+    DenseMatrix Q_loc1, Q_loc2, R_hat, R_upper;
 
-    Qloc = den_mat(qI, qI, 0);
-    for(i=1; i<=p; i*=2){
+    Q_loc1 = gen_mat(qI, qJ, 0);
+    Q_loc2 = gen_mat(2*qJ, qJ, 0);
+    R_upper = gen_mat(qJ, qJ, 0);
+    R_hat = gen_mat(2*qJ, qJ, 0);
+    
+    for(i=1; i<nprocs; i*=2){
         if(myid%i == 0){
-            hhorth(W, Qloc, R);
-            
+            if(i==1)
+                hhorth(W, &Q_loc1, &R_upper);
+            else
+                hhorth(&R_hat, &Q_loc2, &R_upper);
+            sendR(&R_hat, &R_upper, i, myid, comm);
         }
     }
+    hhorth(&R_hat, &Q_loc2, &R_upper);
 }
+
+void sendR(DenseMatrix *R_hat, DenseMatrix *R_upper, int level, int myid, MPI_Comm comm){
+    int j;
+    MPI_Status stat;
+    for(j=0;j<R_upper->J;j++){
+        if(myid%(level*2) != 0)
+            MPI_Send(R_upper->col_ptr[j], (j+1), MPI_DOUBLE, (myid-level), 0, comm);
+        else
+            MPI_Recv(&R_hat->col_ptr[j][R_upper->I], (j+1), 
+                MPI_DOUBLE, (myid+level), MPI_ANY_TAG, comm, &stat);
+    }
+}
+
 
 void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R){
 	int i,j;
@@ -111,19 +135,19 @@ void vec_vec_add(double *xhat, double *x, double *y, int n, int sub){
 	}
 }
 
-/*
+
 // matrix-matrix multiply //
 void mat_mul(DenseMatrix *AB, DenseMatrix *A, DenseMatrix *B){
 	int i,j,k;
 	if(A->J != B->I)
 		return;
-	for(j=0;j<AB->J;j++)
-		for(i=0;i<AB->I;i++)
+	for(j=0;j<B->J;j++)
+		for(i=0;i<A->I;i++)
 			for(k=0;k<A->J;k++)
 				AB->col_ptr[j][i] += A->col_ptr[k][i]*B->col_ptr[j][k];
 
 }
-
+/*
 // matrix-matrix addition //
 void mat_mat_add(DenseMatrix *A_B, DenseMatrix *A, DenseMatrix* B, int sub){
     int j;

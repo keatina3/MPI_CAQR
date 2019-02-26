@@ -3,6 +3,8 @@
 
 #define ERR 1.0E-08
 
+void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, int nprocs, int myid, MPI_Comm comm);
+void sendR(DenseMatrix *R_hat, DenseMatrix *R_upper, int level, int myid, MPI_Comm comm);
 void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R);
 void get_z(double *z, double *x, int k, int n);
 void vec_scal_prod(double *x, double *xhat, double y, int n, int div);
