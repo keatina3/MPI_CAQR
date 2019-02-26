@@ -7,8 +7,7 @@ typedef struct
 	int J;
 	double *vals;
 	double **col_ptr;
-}
-DenseMatrix;
+} DenseMatrix, *DenseMatrix_arr;
 
 DenseMatrix gen_mat(int I, int J, int rand);
 void assign_rand(DenseMatrix *A);

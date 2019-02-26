@@ -1,4 +1,4 @@
-//#include <stdio.h>
+#include <stdio.h>
 
 #include <stdlib.h>
 #include <math.h>
@@ -8,25 +8,43 @@
 
 void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, int nprocs, int myid, MPI_Comm comm){
     int qI = W->I, qJ = W->J;
-    int i,j;
+    int i,j, count=0;
     MPI_Status stat;
+    DenseMatrix_arr *w;
     DenseMatrix Q_loc1, Q_loc2, R_hat, R_upper;
-
+    
+    w = (DenseMatrix_arr*)malloc((1+log2(nprocs))*sizeof(DenseMatrix*));
+    for(i=0;i<(1+log2(nprocs));i++){
+        w[i] = (DenseMatrix*)malloc(sizeof(DenseMatrix));
+    }
     Q_loc1 = gen_mat(qI, qJ, 0);
     Q_loc2 = gen_mat(2*qJ, qJ, 0);
     R_upper = gen_mat(qJ, qJ, 0);
     R_hat = gen_mat(2*qJ, qJ, 0);
     
-    for(i=1; i<nprocs; i*=2){
+    for(i=1; i<=nprocs; i*=2){
         if(myid%i == 0){
             if(i==1)
-                hhorth(W, &Q_loc1, &R_upper);
-            else
-                hhorth(&R_hat, &Q_loc2, &R_upper);
+                hhorth(W, &Q_loc1, &R_upper, w[count]);
+            else if(i==nprocs){
+                hhorth(&R_hat, &Q_loc2, &R_upper, w[count]);
+                break;
+            } else
+                hhorth(&R_hat, &Q_loc2, &R_upper, w[count]);
             sendR(&R_hat, &R_upper, i, myid, comm);
         }
+        count++;
     }
-    hhorth(&R_hat, &Q_loc2, &R_upper);
+    printf("TEST\n");
+    
+    count=0; 
+    for(i=1; i<=nprocs; i*=2){
+        if(myid%i == 0)
+            free_mat(w[count]);
+        free(w[count]);
+        count++;
+    }
+    free(w);
 }
 
 void sendR(DenseMatrix *R_hat, DenseMatrix *R_upper, int level, int myid, MPI_Comm comm){
@@ -42,7 +60,7 @@ void sendR(DenseMatrix *R_hat, DenseMatrix *R_upper, int level, int myid, MPI_Co
 }
 
 
-void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R){
+void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, DenseMatrix *W){
 	int i,j;
 	int n = A->I, m = A->J;
 	double *w_vals = (double*)calloc(n*m,sizeof(double));
@@ -51,34 +69,43 @@ void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R){
 	double *wv = (double*)calloc(n,sizeof(double));			// temp storage for Wj*V)
 	double v;
 	double *Xk = (double*)calloc(n,sizeof(double));		// temp placeholder of X
-	
+	//DenseMatrix W;
 	// initialising pointers for W //
 	for(j=0;j<m;j++){
     	w[j] = &w_vals[j*n];
 	}
-	for(j=0;j<m;j++){
+    *W = gen_mat(n, m, 0);
+	
+    for(j=0;j<m;j++){
 		for(i=0;i<n;i++)
 			Xk[i] = A->col_ptr[j][i];			// setting Xj = Aj
         if(j > 0){
             for(i=0;i<j;i++){			// iterating through (Pj-1)(Pj-2)...(P1)(Xj)
-                v = 2.0*inner_prod(Xk, w[i], n);	// getting v=2*X(^T)w
-                vec_scal_prod(wv, w[i], v, n, 0); 	// getting wv(^T)
+                //v = 2.0*inner_prod(Xk, w[i], n);	// getting v=2*X(^T)w
+                v = 2.0*inner_prod(Xk, W->col_ptr[i], n);	// getting v=2*X(^T)w
+                //vec_scal_prod(wv, w[i], v, n, 0); 	// getting wv(^T)
+                vec_scal_prod(wv, W->col_ptr[i], v, n, 0); 	// getting wv(^T)
                 vec_vec_add(Xk, Xk, wv, n, 1);		// PXk = Xk - wv(^T)
             }
 		}
 		get_z(z, Xk, j, n);					// getting z to be used in getting Wj
-        vec_scal_prod(w[j], z, norm_2(z, n), n, 1);		// w = z / ||z||
-        v = 2.0*inner_prod(Xk, w[j], n);		// see above
-        vec_scal_prod(wv, w[j], v, n, 0);
+        //vec_scal_prod(w[j], z, norm_2(z, n), n, 1);		// w = z / ||z||
+        vec_scal_prod(W->col_ptr[j], z, norm_2(z, n), n, 1);		// w = z / ||z||
+        //v = 2.0*inner_prod(Xk, w[j], n);		// see above
+        v = 2.0*inner_prod(Xk, W->col_ptr[j], n);		// see above
+        //vec_scal_prod(wv, w[j], v, n, 0);
+        vec_scal_prod(wv, W->col_ptr[j], v, n, 0);
         vec_vec_add(Xk, Xk, wv, n, 1);
 		for(i=0;i<=j;i++)
 			R->col_ptr[j][i] = Xk[i];			//	rk = Pk(Pk-1)...Xk
+        /*
         Q->col_ptr[j][j] = 1.0;					//	Qej
         for(i=j;i>=0;i--){						// Qk = P1..(Pk)(ek)
             v = 2.0*inner_prod(Q->col_ptr[j], w[i], n);
             vec_scal_prod(wv, w[i], v, n, 0); 
             vec_vec_add(Q->col_ptr[j], Q->col_ptr[j], wv, n, 1);
         }
+        */
     }
 	// freeing allocated memory //
 	free(Xk);
