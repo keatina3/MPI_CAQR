@@ -11,7 +11,8 @@ int main(int argc, char *argv[]){
     int option;
     int rows, cols, block, t;
     DenseMatrix A, Q, R, W;
-    srand48(1000);
+    DenseMatrix_arr *ws;
+	srand48(1000);
     //srand48(time(NULL));
     
     MPI_Init(&argc, &argv);
@@ -40,16 +41,24 @@ int main(int argc, char *argv[]){
 		return 1;
 	}
 
+	/*	
     W = gen_mat(rows/4, block, 1);
+	R = gen_mat(block, block, 0);
+    Q = gen_mat(rows, cols, 0);
 
-    if(myid==0){
-        R = gen_mat(cols, cols, 0);
-        Q = gen_mat(rows, cols, 0);
-    }
+    TSQR(&W, &Q, &R, &ws, nprocs, myid, MPI_COMM_WORLD);
 
-    TSQR(&W, &Q, &R, nprocs, myid, MPI_COMM_WORLD);
+	free_mat(&W); free_mat(&Q); free_mat(&R);
+    */
+	
+	A = gen_mat(rows, cols, 1);
+	Q = gen_mat(rows, cols, 0);
+	R = gen_mat(cols, cols, 0);
+	
+	CAQR(&A, &Q, &R, block, 0, A.I, R.I, nprocs, myid, MPI_COMM_WORLD);
 
-    MPI_Finalize();
+	free_mat(&A); free_mat(&Q); free_mat(&R);
+	MPI_Finalize();
 
     return 0;
 }

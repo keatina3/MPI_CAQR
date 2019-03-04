@@ -13,7 +13,7 @@ DenseMatrix gen_mat(int I, int J, int rand){
 	A.vals = (double*)calloc(A.I*A.J,sizeof(double));
 	A.col_ptr = (double**)malloc(A.J*sizeof(double*));
 	
-	init_mat(&A);
+	init_mat(&A,A.I);
 	if(rand)
 		assign_rand(&A);
 
@@ -28,10 +28,24 @@ void assign_rand(DenseMatrix *A){
 }
 
 // initialises pointers in 2d array in col major format //
-void init_mat(DenseMatrix *A){
+void init_mat(DenseMatrix *A, int offset){
 	int j;
 	for(j=0;j<A->J;j++)
-		A->col_ptr[j] = &A->vals[(A->I)*j];
+		A->col_ptr[j] = &A->vals[(offset)*j];
+}
+
+int decomp1d(int n, int p, int myid, int *s, int *e){
+    int d,r;
+    d = n/p;
+    r = n%p;
+    if(myid < r){
+    	*s = myid*(d+1);
+    	*e = *s + d;
+    } else {
+    	*s = r*(d+1) + (myid-r)*d;
+    	*e = *s + (d-1);
+    }
+ 	return 0;
 }
 
 // free allocated memory of dense matrix //

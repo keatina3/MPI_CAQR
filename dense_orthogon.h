@@ -3,8 +3,10 @@
 
 #define ERR 1.0E-08
 
-void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, int nprocs, int myid, MPI_Comm comm);
+void CAQR(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, int b, int count, int offsetA, int offsetR, int nprocs, int myid, MPI_Comm comm);
+void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, DenseMatrix_arr **w, int nprocs, int myid, MPI_Comm comm);
 void sendR(DenseMatrix *R_hat, DenseMatrix *R_upper, int level, int myid, MPI_Comm comm);
+void updateTrailing(DenseMatrix *A_tilde, DenseMatrix_arr **w, int nprocs, int myid);
 void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, DenseMatrix *W);
 void get_z(double *z, double *x, int k, int n);
 void vec_scal_prod(double *x, double *xhat, double y, int n, int div);

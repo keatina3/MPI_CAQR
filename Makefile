@@ -11,7 +11,10 @@ TARGET = prog
 all: $(OBJECTS)
 	$(CC) $(CFLAGS) -o $(TARGET) $^ $(LDFLAGS)
 
-.PHONY: clean
+.PHONY: test clean
+
+test: all
+	mpiexec --oversubscribe -n 4 ./prog -b 50 -n 1000 -m 1000
 
 clean:
 	$(RM) $(OBJECTS) $(TARGET)
