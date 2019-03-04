@@ -12,6 +12,8 @@ int main(int argc, char *argv[]){
     int rows, cols, block, t;
     DenseMatrix A, Q, R, W;
     DenseMatrix_arr *ws;
+	double time_taken;
+	clock_t start, end;
 	srand48(1000);
     //srand48(time(NULL));
     
@@ -41,22 +43,16 @@ int main(int argc, char *argv[]){
 		return 1;
 	}
 
-	/*	
-    W = gen_mat(rows/4, block, 1);
-	R = gen_mat(block, block, 0);
-    Q = gen_mat(rows, cols, 0);
-
-    TSQR(&W, &Q, &R, &ws, nprocs, myid, MPI_COMM_WORLD);
-
-	free_mat(&W); free_mat(&Q); free_mat(&R);
-    */
-	
 	A = gen_mat(rows, cols, 1);
 	Q = gen_mat(rows, cols, 0);
 	R = gen_mat(cols, cols, 0);
-	
-	CAQR(&A, &Q, &R, block, 0, A.I, R.I, nprocs, myid, MPI_COMM_WORLD);
 
+	start=clock();	
+	CAQR(&A, &Q, &R, block, 0, A.I, R.I, nprocs, myid, MPI_COMM_WORLD);
+	end=clock();
+	time_taken = ((double)(end-start))/CLOCKS_PER_SEC;
+	printf("%d, %d, %d, %lf\n",rows,cols,block,time_taken);
+	
 	free_mat(&A); free_mat(&Q); free_mat(&R);
 	MPI_Finalize();
 

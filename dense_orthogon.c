@@ -1,5 +1,4 @@
 #include <stdio.h>
-
 #include <stdlib.h>
 #include <math.h>
 #include <mpi.h>
@@ -14,24 +13,15 @@ void CAQR(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, int b, int count, int 
 	double *Rvals, *Avals;
 	double **Rcols, **Acols;
 	int i, j;
-	int s, e;
+	int s, e, diff;
 	int count2=0;
-	//int offsetA, offsetR;
 	
 	if(count==0){
-		//offsetA = A->I;
-		//offsetR = R->I;
 		Rvals = R->vals;
 		Rcols = R->col_ptr;
 		Avals = A->vals;
 		Acols = A->col_ptr;
 	}
-	/*
-	W.I = A->I;
-	W.J = b;
-	W.vals = A->vals;
-	W.col_ptr = A->col_ptr;
-	*/
 	
 	decomp1d(A->I, nprocs, myid, &s, &e);
 	Wi.I = e-s+1;
@@ -39,25 +29,15 @@ void CAQR(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, int b, int count, int 
 	Wi.col_ptr = (double**)malloc(Wi.J*sizeof(double*));
 	Wi.vals = &(A->vals[s]);
 	init_mat(&Wi, offsetA);
-	//printf("segA test: %f, myid=%d,count=%d\n", *(s+A->vals),myid,count);
-	//printf("myid=%d, s=%d, e=%d\n",myid,s,e);
-	//printf("offset=%d\n",offsetA);
-	//printf("Wi_col_ptr[0][0]=%f, count=%d, b=%d, I=%d, J=%d\n", *(*(Wi.col_ptr)+1000),count,b,Wi.I,Wi.J);
+	
 	R_upper.I = b;
 	R_upper.J = b;
 	R_upper.col_ptr = (double**)malloc(R_upper.J*sizeof(double*));
 	R_upper.vals = R->vals;
-	init_mat(&R_upper, offsetR);		// put in offset parameter in fn //
+	init_mat(&R_upper, offsetR);		
 
-	//printf("segR test: %f\n", R_upper.col_ptr[b-1][b-1]);
-	
-	//printf("count: %d\n", count);
-	//printf("segR test: %f, myid=%d,count=%d\n", R_upper.col_ptr[b-1][b-1],myid,count);
-	//printf("segA test: %f, myid=%d,count=%d\n", A->col_ptr[0][s],myid,count);
-	//printf("segW test: %f, myid=%d,count=%d\n", Wi.col_ptr[b-1][0],myid,count);
 	MPI_Barrier(comm);
 	TSQR(&Wi, Q, &R_upper, &w, nprocs, myid, comm);
-	printf("Hello test here,b=%d\n",b);
 	
 	A_trail.I = e-s+1;
 	A_trail.J = (A->J)-b;
@@ -65,7 +45,6 @@ void CAQR(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, int b, int count, int 
 	A_trail.vals = &(A->col_ptr[b][s]);
 	init_mat(&A_trail, offsetA);
 	
-	printf("AtildeI = %d, AtildeJ = %d\n", A_trail.I, A_trail.J);
 	updateTrailing(&A_trail, &w, nprocs, myid);	
    
 	for(i=1; i<=nprocs; i*=2){
@@ -74,16 +53,13 @@ void CAQR(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, int b, int count, int 
         free(w[count2]);
         count2++;
     }
-    free(w);
+	free(w);
 	
-	printf("HELLOOOOO\n");
 	if(myid==0){
 		for(i=0;i<A_trail.J;i++)
 			memcpy(R->col_ptr[i+b], A_trail.col_ptr[i], b*sizeof(double));
 	}
 	
-	printf("Ai=%d, Aj=%d, count=%d, myid=%d\n", A->I,A->J,count,myid);
-	// shift of data will cause 0's in A_trail //
 	for(i=1;i<nprocs;i++)
 		if(myid==i)
 			for(j=0;j<A_trail.J;j++)
@@ -108,12 +84,18 @@ void CAQR(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, int b, int count, int 
 	init_mat(R, offsetR);
 	
 	MPI_Barrier(comm);
+	printf("count=%d\n",count);
 	count++;
-	if(A->J > b){
-		CAQR(A, Q, R, b, count, offsetA, offsetR, nprocs, myid, comm);
+	if(myid==0)
+		diff = (e-s+1) > b ? b : (e-s+1);
+	MPI_Bcast(&diff, 1, MPI_INT, 0, comm);
+	if(diff > nprocs && A->J > 0){
+		CAQR(A, Q, R, diff, count, offsetA, offsetR, nprocs, myid, comm);
+	} else {
+		if(myid==0)
+			hhorth(A, Q, R, Q);
 	}
-	printf("FREEING TEST\n");
-	// put pointers back to start //
+	
 	R->vals = Rvals;
 	R->col_ptr = Rcols;
 	A->vals = Avals;
@@ -126,18 +108,18 @@ void updateTrailing(DenseMatrix *A_tilde, DenseMatrix_arr **w, int nprocs, int m
 	int n = A_tilde->I, m = A_tilde->J, count=0; 
 	wv = (double*)calloc(n,sizeof(double));
 
-    for(i=1;i<=nprocs;i*=2){
+	for(i=1;i<=nprocs;i*=2){
 		if(myid%i == 0){
 			for(j=0;j<m;j++){
     			for(k=0;k<(*w)[count]->J;k++){
-    				v = 2.0*inner_prod(A_tilde->col_ptr[j], (*w)[count]->col_ptr[k], n);
+					v = 2.0*inner_prod(A_tilde->col_ptr[j], (*w)[count]->col_ptr[k], n);
         			vec_scal_prod(wv, (*w)[count]->col_ptr[k], v, n, 0); 
             		vec_vec_add(A_tilde->col_ptr[j], A_tilde->col_ptr[j], wv, n, 1);
 				}
 			}
-        }
-        count++;
-    }
+    	}
+		count++;
+	}
 	free(wv);
 }
 
@@ -156,16 +138,11 @@ void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, DenseMatrix_arr **w, i
     //R_upper = gen_mat(qJ, qJ, 0);
 	R_hat = gen_mat(2*qJ, qJ, 0);
     
-	//printf("segR test: %f\n", R->col_ptr[qJ-1][qJ-1]);
-	//printf("segW test: %f, myid=%d\n", W->col_ptr[qJ-1][qI-1],myid);
-    
-	printf("TEST1\n");
     for(i=1; i<=nprocs; i*=2){
         if(myid%i == 0){
             if(i==1){
                 hhorth(W, &Q_loc1, R, (*w)[count]);
             }else if(i==nprocs){
-    			printf("TEST3\n");
                 hhorth(&R_hat, &Q_loc2, R, (*w)[count]);
                 break;
             } else
@@ -175,7 +152,6 @@ void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, DenseMatrix_arr **w, i
         count++;
     }
 	free_mat(&R_hat);
-    printf("TEST2\n");
 }
 
 void sendR(DenseMatrix *R_hat, DenseMatrix *R_upper, int level, int myid, MPI_Comm comm){
@@ -194,36 +170,25 @@ void sendR(DenseMatrix *R_hat, DenseMatrix *R_upper, int level, int myid, MPI_Co
 void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, DenseMatrix *W){
 	int i,j;
 	int n = A->I, m = A->J;
-	//double *w_vals = (double*)calloc(n*m,sizeof(double));
-	//double **w = (double**)malloc(n*sizeof(double*));		// to store matrix of w's
 	double *z = (double*)calloc(n,sizeof(double));			// stores z vector
 	double *wv = (double*)calloc(n,sizeof(double));			// temp storage for Wj*V)
 	double v;
 	double *Xk = (double*)calloc(n,sizeof(double));		// temp placeholder of X
-	// initialising pointers for W //
-	//for(j=0;j<m;j++){
-    //	w[j] = &w_vals[j*n];
-	//w}
-    *W = gen_mat(n, m, 0);
-	
+    
+	*W = gen_mat(n, m, 0);
 	for(j=0;j<m;j++){
 		for(i=0;i<n;i++)
 			Xk[i] = A->col_ptr[j][i];			// setting Xj = Aj
 		if(j > 0){
             for(i=0;i<j;i++){			// iterating through (Pj-1)(Pj-2)...(P1)(Xj)
-                //v = 2.0*inner_prod(Xk, w[i], n);	// getting v=2*X(^T)w
                 v = 2.0*inner_prod(Xk, W->col_ptr[i], n);	// getting v=2*X(^T)w
-                //vec_scal_prod(wv, w[i], v, n, 0); 	// getting wv(^T)
                 vec_scal_prod(wv, W->col_ptr[i], v, n, 0); 	// getting wv(^T)
                 vec_vec_add(Xk, Xk, wv, n, 1);		// PXk = Xk - wv(^T)
             }
 		}
 		get_z(z, Xk, j, n);					// getting z to be used in getting Wj
-        //vec_scal_prod(w[j], z, norm_2(z, n), n, 1);		// w = z / ||z||
         vec_scal_prod(W->col_ptr[j], z, norm_2(z, n), n, 1);		// w = z / ||z||
-        //v = 2.0*inner_prod(Xk, w[j], n);		// see above
         v = 2.0*inner_prod(Xk, W->col_ptr[j], n);		// see above
-        //vec_scal_prod(wv, w[j], v, n, 0);
         vec_scal_prod(wv, W->col_ptr[j], v, n, 0);
         vec_vec_add(Xk, Xk, wv, n, 1);
 		for(i=0;i<=j;i++)
@@ -239,8 +204,6 @@ void hhorth(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, DenseMatrix *W){
     }
 	// freeing allocated memory //
 	free(Xk);
-    //free(w_vals);
-    //free(w);
     free(z);
     free(wv);
 }
@@ -304,25 +267,6 @@ void mat_mul(DenseMatrix *AB, DenseMatrix *A, DenseMatrix *B){
 				AB->col_ptr[j][i] += A->col_ptr[k][i]*B->col_ptr[j][k];
 
 }
-/*
-// matrix-matrix addition //
-void mat_mat_add(DenseMatrix *A_B, DenseMatrix *A, DenseMatrix* B, int sub){
-    int j;
-    if(A->J != B->J || A->I != B->I)
-        return;
-    for(j=0;j<A_B->J;j++)
-        vec_vec_add(A_B->col_ptr[j], A->col_ptr[j], B->col_ptr[j], A_B->I, sub);
-}
-
-// matrix transpose //
-void transpose(DenseMatrix *A, DenseMatrix *At){
-	int i,j;
-	
-	for(j=0;j<At->J;j++)
-		for(i=0;i<At->I;i++)
-			At->col_ptr[j][i] = A->col_ptr[i][j];
-}
-*/
 
 // euclidian norm //
 double norm_2(double *x, int n){
@@ -344,15 +288,3 @@ double inner_prod(double *x, double *y, int n){
 	
 	return prod;
 }
-
-/*
-// calculates max( |Aij| )
-double fwd_err(DenseMatrix *A){
-	int i,j;
-	double fwd_err = 0.0;
-	for(j=0;j<A->J;j++)
-		for(i=0;i<A->I;i++)
-			fwd_err = A->col_ptr[j][i] > fwd_err ? A->col_ptr[j][i] : fwd_err;
-	return fwd_err;
-}
-*/
