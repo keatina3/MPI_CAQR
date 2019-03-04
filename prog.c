@@ -9,9 +9,8 @@
 int main(int argc, char *argv[]){
     int myid, nprocs;
     int option;
-    int rows, cols, block, t;
-    DenseMatrix A, Q, R, W;
-    DenseMatrix_arr *ws;
+    int rows, cols, block;
+    DenseMatrix A, Q, R;
 	double time_taken;
 	clock_t start, end;
 	srand48(1000);
@@ -21,7 +20,7 @@ int main(int argc, char *argv[]){
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs); 
     
-    rows = 1E5, cols = 5E4, block = 500, t=0;
+    rows = 1E5, cols = 5E4, block = 500;
 	
     while((option=getopt(argc,argv,"n:m:b:t"))!=-1){
 		switch(option){
@@ -30,8 +29,6 @@ int main(int argc, char *argv[]){
 			case 'm': cols = atoi(optarg);
 				break;
 			case 'b': block = atoi(optarg);
-				break;
-			case 't': t = 1;
 				break;
 			default:
 				printf("Incorrect options entered!\n");
@@ -51,7 +48,8 @@ int main(int argc, char *argv[]){
 	CAQR(&A, &Q, &R, block, 0, A.I, R.I, nprocs, myid, MPI_COMM_WORLD);
 	end=clock();
 	time_taken = ((double)(end-start))/CLOCKS_PER_SEC;
-	printf("%d, %d, %d, %lf\n",rows,cols,block,time_taken);
+	if(myid==0)
+		printf("%d, %d, %d, %d, %lf\n",nprocs,rows,cols,block,time_taken);
 	
 	free_mat(&A); free_mat(&Q); free_mat(&R);
 	MPI_Finalize();

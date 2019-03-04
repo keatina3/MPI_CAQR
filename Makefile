@@ -14,7 +14,7 @@ all: $(OBJECTS)
 .PHONY: test clean
 
 test: all
-	mpiexec --oversubscribe -n 4 ./prog -b 50 -n 10000 -m 5000
+	./test.sh
 
 clean:
 	$(RM) $(OBJECTS) $(TARGET)

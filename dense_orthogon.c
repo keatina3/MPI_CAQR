@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <mpi.h>
@@ -84,12 +83,11 @@ void CAQR(DenseMatrix *A, DenseMatrix *Q, DenseMatrix *R, int b, int count, int 
 	init_mat(R, offsetR);
 	
 	MPI_Barrier(comm);
-	printf("count=%d\n",count);
 	count++;
 	if(myid==0)
 		diff = (e-s+1) > b ? b : (e-s+1);
 	MPI_Bcast(&diff, 1, MPI_INT, 0, comm);
-	if(diff > nprocs && A->J > 0){
+	if(diff > nprocs && A->J > b){
 		CAQR(A, Q, R, diff, count, offsetA, offsetR, nprocs, myid, comm);
 	} else {
 		if(myid==0)
@@ -124,10 +122,9 @@ void updateTrailing(DenseMatrix *A_tilde, DenseMatrix_arr **w, int nprocs, int m
 }
 
 void TSQR(DenseMatrix *W, DenseMatrix* Q, DenseMatrix *R, DenseMatrix_arr **w, int nprocs, int myid, MPI_Comm comm){
-    int qI = W->I, qJ = W->J;
-    int i,j, count=0;
-    MPI_Status stat;
-    DenseMatrix Q_loc1, Q_loc2, R_hat, R_upper;
+    int qJ = W->J;
+    int i, count=0;
+    DenseMatrix Q_loc1, Q_loc2, R_hat;
     
     (*w) = (DenseMatrix_arr*)malloc((1+log2(nprocs))*sizeof(DenseMatrix*));
     for(i=0;i<(1+log2(nprocs));i++){
